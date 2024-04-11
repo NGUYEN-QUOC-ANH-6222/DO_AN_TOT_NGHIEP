@@ -1,10 +1,10 @@
 {
-  "C_Cpp_Runner.cCompilerPath": "C:/Users/QUOC ANH/.platformio/packages/toolchain-atmelavr/bin/avr-gcc.exe",
-  "C_Cpp_Runner.cppCompilerPath": "C:/Users/QUOC ANH/.platformio/packages/toolchain-atmelavr/bin/avr-g++.exe",
-  "C_Cpp_Runner.debuggerPath": "C:/Users/QUOC ANH/.platformio/packages/toolchain-atmelavr/bin/avr-gdb.exe",
-  "C_Cpp_Runner.cStandard": "gnu11",
-  "C_Cpp_Runner.cppStandard": "gnu++11",
   "C_Cpp_Runner.msvcBatchPath": "",
+  "C_Cpp_Runner.cCompilerPath": "gcc",
+  "C_Cpp_Runner.cppCompilerPath": "g++",
+  "C_Cpp_Runner.debuggerPath": "gdb",
+  "C_Cpp_Runner.cStandard": "",
+  "C_Cpp_Runner.cppStandard": "",
   "C_Cpp_Runner.useMsvc": false,
   "C_Cpp_Runner.warnings": [
     "-Wall",
@@ -37,18 +37,7 @@
   "C_Cpp_Runner.warningsAsError": false,
   "C_Cpp_Runner.compilerArgs": [],
   "C_Cpp_Runner.linkerArgs": [],
-  "C_Cpp_Runner.includePaths": [
-    "C:/Users/QUOC ANH/OneDrive_Quoc_Anh/OneDrive/Documents/DO_AN_TOT_NGHIEP/Code_SBM/Self_Balancing_Motorcycle/include",
-    "C:/Users/QUOC ANH/OneDrive_Quoc_Anh/OneDrive/Documents/DO_AN_TOT_NGHIEP/Code_SBM/Self_Balancing_Motorcycle/src",
-    "C:/Users/QUOC ANH/.platformio/packages/framework-arduino-avr/cores/arduino",
-    "C:/Users/QUOC ANH/.platformio/packages/framework-arduino-avr/variants/eightanaloginputs",
-    "C:/Users/QUOC ANH/.platformio/packages/framework-arduino-avr/libraries/EEPROM/src",
-    "C:/Users/QUOC ANH/.platformio/packages/framework-arduino-avr/libraries/HID/src",
-    "C:/Users/QUOC ANH/.platformio/packages/framework-arduino-avr/libraries/SPI/src",
-    "C:/Users/QUOC ANH/.platformio/packages/framework-arduino-avr/libraries/SoftwareSerial/src",
-    "C:/Users/QUOC ANH/.platformio/packages/framework-arduino-avr/libraries/Wire/src",
-    ""
-  ],
+  "C_Cpp_Runner.includePaths": [],
   "C_Cpp_Runner.includeSearch": [
     "*",
     "**/*"
