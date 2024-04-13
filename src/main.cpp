@@ -8,8 +8,8 @@
 #define PWM_2         10
 #define DIR_2         5 
 
-#define ENC_1         2
-#define ENC_2         3
+#define ENC_1         3
+#define ENC_2         2
 
 #define BRAKE         8
 #define BUZZER        12
@@ -21,7 +21,7 @@
 #define ST_LIMIT        5
 #define SPEED_LIMIT     4
 
-//Line 25 -49 define for function
+// Line 25 -49 define for function
 #define MPU6050 0x68              // Device address
 #define ACCEL_CONFIG 0x1C         // Accelerometer configuration address
 #define GYRO_CONFIG  0x1B         // Gyro configuration address
@@ -121,6 +121,7 @@ void getButtonState (int bStatus)  {
   }
 }
 
+// Chuyển đổi data ASCII sang số nguyên 
 void getJoystickState (byte data[8])    {
   int joyX = (data[1] - 48) * 100 + (data[2] - 48) * 10 + (data[3] - 48);   // obtain the Int from the ASCII representation
   int joyY = (data[4] - 48) * 100 + (data[5] - 48) * 10 + (data[6] - 48);
@@ -203,7 +204,7 @@ void beep() {
     delay(80);
 }
 
-void save() {
+void save() { //save value calid into EPPROM
     EEPROM.put(0, offsets);
     delay(100);
     EEPROM.get(0, offsets);
@@ -266,8 +267,8 @@ void angle_setup() {
 }
 
 void battVoltage(double voltage) {
-  if (voltage > 8 && voltage <= 9.5) {
-    digitalWrite(BUZZER, HIGH);
+  if (voltage > 5 && voltage <= 9.5) {
+    digitalWrite(BUZZER, HIGH);   
   } else {
     digitalWrite(BUZZER, LOW);
   }
@@ -354,7 +355,7 @@ void ENC_READ() {
 //
 
 void setup() {
-  Serial.begin(115200);
+  Serial.begin(9600);
 
   // Pins D9 and D10 - 7.8 kHz
   TCCR1A = 0b00000001; 
@@ -444,4 +445,3 @@ void loop() {
     previousT_2 = currentT;
   }
 }
-
