@@ -1,4 +1,4 @@
-#include <Arduino.h>
+#include  <Arduino.h>
 #include <Wire.h>
 #include "EEPROM.h"
 #include "ServoTimer2.h"
@@ -252,7 +252,6 @@ void angle_setup() {
   delay(100);
   writeTo(MPU6050, PWR_MGMT_1, 0);
   writeTo(MPU6050, ACCEL_CONFIG, accSens << 3);   // Specifying output scaling of accelerometer
-  writeTo(MPU6050, GYRO_CONFIG, gyroSens << 3);   // Specifying output scaling of gyroscope
   delay(100);
 
   for (int i = 0; i < 1024; i++) {
@@ -445,3 +444,5 @@ void loop() {
     previousT_2 = currentT;
   }
 }
+
+

@@ -56,5 +56,6 @@
   "C_Cpp_Runner.showCompilationTime": false,
   "C_Cpp_Runner.useLinkTimeOptimization": false,
   "C_Cpp_Runner.msvcSecureNoWarnings": false,
-  "cmake.sourceDirectory": "C:/Users/QUOC ANH/OneDrive_Quoc_Anh/OneDrive/Documents/DO_AN_TOT_NGHIEP/Code_SBM/Self_Balancing_Motorcycle/.pio/libdeps/nanoatmega328/Unity"
+  "cmake.sourceDirectory": "C:/Users/QUOC ANH/OneDrive_Quoc_Anh/OneDrive/Documents/DO_AN_TOT_NGHIEP/Code_SBM/Self_Balancing_Motorcycle/.pio/libdeps/nanoatmega328/Unity",
+  "compile-hero.disable-compile-files-on-did-save-code": false
 }
