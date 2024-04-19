@@ -12,8 +12,6 @@
 #define ENC_2         2
 
 #define BRAKE         8
-#define BUZZER        12
-#define VBAT          A7
 
 #define STEERING_MAX    350
 #define SPEED_MAX       80
@@ -197,13 +195,6 @@ void printValues() {
   Serial.print(" K4: "); Serial.println(K4,4);
 }
 
-void beep() {
-    digitalWrite(BUZZER, HIGH);
-    delay(70);
-    digitalWrite(BUZZER, LOW);
-    delay(80);
-}
-
 void save() { //save value calid into EPPROM
     EEPROM.put(0, offsets);
     delay(100);
@@ -211,7 +202,6 @@ void save() { //save value calid into EPPROM
     if (offsets.ID == 35) calibrated = true;
     calibrating = false;
     Serial.println("calibrating off");
-    beep();
 }
 
 void angle_calc() {
@@ -260,17 +250,7 @@ void angle_setup() {
     delay(3);
   }
   GyX_offset = GyX_offset_sum >> 10;
-  beep();
-  beep();
   Serial.print("GyX offset: ");  Serial.println(GyX_offset);
-}
-
-void battVoltage(double voltage) {
-  if (voltage > 5 && voltage <= 9.5) {
-    digitalWrite(BUZZER, HIGH);   
-  } else {
-    digitalWrite(BUZZER, LOW);
-  }
 }
 
 void Motor1_control(int sp) {
@@ -366,7 +346,6 @@ void setup() {
   pinMode(DIR_1, OUTPUT);  
   pinMode(DIR_2, OUTPUT);
   pinMode(BRAKE, OUTPUT);
-  pinMode(BUZZER, OUTPUT);
   pinMode(ENC_1, INPUT);
   pinMode(ENC_2, INPUT);
   
@@ -380,7 +359,6 @@ void setup() {
   if (offsets.ID == 35) calibrated = true;
     else calibrated = false;
   delay(3000);
-  beep();
   angle_setup();
 }
 
@@ -437,7 +415,6 @@ void loop() {
   }
   
   if (currentT - previousT_2 >= 2000) {    
-    battVoltage((double)analogRead(VBAT) / bat_divider); 
     if (!calibrated && !calibrating) {
       Serial.println("first you need to calibrate the balancing point...");
     }
