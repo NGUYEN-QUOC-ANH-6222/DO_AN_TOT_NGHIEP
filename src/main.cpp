@@ -3,9 +3,9 @@
 #include "EEPROM.h"
 #include "ServoTimer2.h"
 
-#define PWM_1         9
+#define PWM_1         10
 #define DIR_1         7
-#define PWM_2         10
+#define PWM_2         9
 #define DIR_2         5 
 
 #define ENC_1         3
@@ -57,7 +57,7 @@ byte buttonStatus = 0;
 //
 
 
-float Gyro_amount = 0.996;  
+float Gyro_amount = 0.996;  //0.996
 
 bool vertical = false;
 bool calibrating = false;
@@ -76,7 +76,7 @@ struct OffsetsObj {
 };
 OffsetsObj offsets;
 
-float alpha = 0.4; 
+float alpha = 0.0; //0.4
 
 int16_t  AcY, AcZ, GyX, gyroX, gyroXfilt;
 
@@ -177,8 +177,6 @@ void sendControlParameters() {
   Serial.print(0);                                                        // datafield #3
   Serial.print((char)ETX);                                                // End of Transmission
 }
-//
-
 
 //Line 184 - 347 from function
 void writeTo(byte device, byte address, byte value) {
@@ -254,8 +252,8 @@ void angle_setup() {
 }
 
 void Motor1_control(int sp) {
-  if (sp > 0) digitalWrite(DIR_1, LOW);
-    else digitalWrite(DIR_1, HIGH);
+  if (sp > 0) digitalWrite(DIR_1, HIGH);
+    else digitalWrite(DIR_1, LOW);
   analogWrite(PWM_1, 255 - abs(sp));
 }
 
@@ -408,6 +406,7 @@ void loop() {
       steering_servo.write(STEERING_CENTER);
       speed_value = 0;
       Motor1_control(0);
+      Serial.println(robot_angle);
       Motor2_control(0);
       motor_pos = 0;
     }
