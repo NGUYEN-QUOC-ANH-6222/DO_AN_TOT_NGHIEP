@@ -49,7 +49,6 @@ byte cmd[8] = {0, 0, 0, 0, 0, 0, 0, 0};
 byte buttonStatus = 0; 
 //
 
-
 float Gyro_amount = 0.996;  //0.996
 
 bool vertical = false;
