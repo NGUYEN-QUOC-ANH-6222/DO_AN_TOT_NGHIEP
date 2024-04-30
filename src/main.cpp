@@ -3,23 +3,21 @@
 #include "EEPROM.h"
 #include "ServoTimer2.h"
 
-#define PWM_1         10
+#define PWM_1         9
+#define PWM_2         10
 #define DIR_1         7
-#define PWM_2         9
 #define DIR_2         5 
-
 #define ENC_1         3
 #define ENC_2         2
-
 #define BRAKE         8
 
-#define STEERING_MAX    350
+#define STEERING_MAX    350 
 #define SPEED_MAX       80
 #define STEERING_CENTER 1500
 #define ST_LIMIT        5
 #define SPEED_LIMIT     4
 
-// Line 25 -49 define for function
+//define for MPU
 #define MPU6050 0x68              // Device address
 #define ACCEL_CONFIG 0x1C         // Accelerometer configuration address
 #define GYRO_CONFIG  0x1B         // Gyro configuration address
@@ -31,8 +29,6 @@
 #define ACCEL_YOUT_L 0x3E
 #define ACCEL_ZOUT_H 0x3F
 #define ACCEL_ZOUT_L 0x40
-#define TEMP_OUT_H 0x41
-#define TEMP_OUT_L 0x42
 #define GYRO_XOUT_H 0x43
 #define GYRO_XOUT_L 0x44
 #define GYRO_YOUT_H 0x45
@@ -45,9 +41,6 @@
 
 #define accSens 0             // 0 = 2g, 1 = 4g, 2 = 8g, 3 = 16g
 #define gyroSens 1            // 0 = 250rad/s, 1 = 500rad/s, 2 1000rad/s, 3 = 2000rad/s
-
-
-
 
 //Define for remote
 #define    STX          0x02
@@ -63,9 +56,9 @@ bool vertical = false;
 bool calibrating = false;
 bool calibrated = false;
 
-float K1 = 115;
-float K2 = 15.00;
-float K3 = 8.00;
+float K1 = -4047;//115
+float K2 = -150;//15
+float K3 = -2.00;//8
 float K4 = 0.60;
 float loop_time = 10;
 
@@ -76,12 +69,12 @@ struct OffsetsObj {
 };
 OffsetsObj offsets;
 
-float alpha = 0.0; //0.4
+float alpha = 0.4; //0.4
 
 int16_t  AcY, AcZ, GyX, gyroX, gyroXfilt;
 
 int16_t  AcYc, AcZc;
-int16_t  GyX_offset = 0;
+int16_t  GyX_offset = 0; //GyX's offset value
 int32_t  GyX_offset_sum = 0;
 
 float robot_angle;
@@ -93,13 +86,11 @@ int16_t motor_speed;
 int32_t motor_pos;
 int steering_remote = 0, speed_remote = 0, speed_value = 0, steering_value = STEERING_CENTER;;
 
-int bat_divider = 58; // this value needs to be adjusted to measure the battery voltage correctly
-
 long currentT, previousT_1, previousT_2 = 0;  
 
 ServoTimer2 steering_servo;
 
-//Line 104 - 180 from remote 
+//Line 104 - 180 from remote         
 void getButtonState (int bStatus)  {
   switch (bStatus) {
 // -----------------  BUTTON #1  -----------------------
@@ -178,7 +169,7 @@ void sendControlParameters() {
   Serial.print((char)ETX);                                                // End of Transmission
 }
 
-//Line 184 - 347 from function
+
 void writeTo(byte device, byte address, byte value) {
   Wire.beginTransmission(device);
   Wire.write(address);
@@ -186,7 +177,7 @@ void writeTo(byte device, byte address, byte value) {
   Wire.endTransmission(true);
 }
 
-void printValues() {
+void printValues() {//Done
   Serial.print("K1: "); Serial.print(K1);
   Serial.print(" K2: "); Serial.print(K2);
   Serial.print(" K3: "); Serial.print(K3,4);
@@ -202,7 +193,13 @@ void save() { //save value calid into EPPROM
     Serial.println("calibrating off");
 }
 
-void angle_calc() {
+void angle_calc() {//Done
+
+  Wire.beginTransmission(MPU6050);
+  Wire.write(GYRO_XOUT_H);
+  Wire.endTransmission(false);
+  Wire.requestFrom(MPU6050, 2, true); 
+  GyX = Wire.read() << 8 | Wire.read();
 
   Wire.beginTransmission(MPU6050);
   Wire.write(ACCEL_YOUT_H);                       
@@ -216,26 +213,20 @@ void angle_calc() {
   Wire.requestFrom(MPU6050, 2, true);  
   AcZ = Wire.read() << 8 | Wire.read(); 
 
-  Wire.beginTransmission(MPU6050);
-  Wire.write(GYRO_XOUT_H);
-  Wire.endTransmission(false);
-  Wire.requestFrom(MPU6050, 2, true); 
-  GyX = Wire.read() << 8 | Wire.read();
-
   AcYc = AcY - offsets.AcY;
   AcZc = AcZ - offsets.AcZ;
   GyX -= GyX_offset;
 
-  robot_angle += GyX * loop_time / 1000 / 65.536;                 
-  Acc_angle = -atan2(AcYc, -AcZc) * 57.2958;   
-  robot_angle = robot_angle * Gyro_amount + Acc_angle * (1.0 - Gyro_amount);
+  robot_angle += GyX * loop_time / 1000 / 65.536; // calculate angle and convert to deg
+  Acc_angle = -atan2(AcYc, -AcZc) * 57.2958; // calculate angle and convert from rad to deg (180/pi)
+  robot_angle = robot_angle * Gyro_amount + Acc_angle * (1.0 - Gyro_amount); //  0.96*(angle +GyroXangle/dt) + 0.4*(accelXangle)
   
-  if (abs(robot_angle) > 10) vertical = false;
-  if (abs(robot_angle) < 0.4) vertical = true;
+  if (abs(robot_angle) > 10) vertical = false; //10
+  if (abs(robot_angle) < 0.4) vertical = true;//0.4
   
 }
 
-void angle_setup() {
+void angle_setup() {// Angle calibration
   Wire.begin();
   delay(100);
   writeTo(MPU6050, PWR_MGMT_1, 0);
@@ -252,9 +243,9 @@ void angle_setup() {
 }
 
 void Motor1_control(int sp) {
-  if (sp > 0) digitalWrite(DIR_1, HIGH);
-    else digitalWrite(DIR_1, LOW);
-  analogWrite(PWM_1, 255 - abs(sp));
+  if (sp > 0) digitalWrite(DIR_1, LOW);
+    else digitalWrite(DIR_1, HIGH);
+  analogWrite(PWM_1, 255 - abs(sp));//255
 }
 
 void Motor2_control(int sp) {
@@ -312,7 +303,7 @@ void ENC_READ() {
   byte cur = (!digitalRead(ENC_1) << 1) + !digitalRead(ENC_2);
   byte old = pos & B00000011;
   byte dir = (pos & B00110000) >> 4;
- 
+
   if (cur == 3) cur = 2;
   else if (cur == 2) cur = 3;
  
@@ -323,11 +314,12 @@ void ENC_READ() {
       if (cur == 0) {
         if (dir == 1 && old == 3) enc_count--;
         else if (dir == 3 && old == 1) enc_count++;
+         Serial.print("chieu:" );Serial.println(dir);
         dir = 0;
       }
     }
     pos = (dir << 4) + (old << 2) + cur;
-  }
+  } 
 }
 //
 
@@ -379,11 +371,12 @@ void loop() {
       gyroXfilt = alpha * gyroX + (1 - alpha) * gyroXfilt;
 
       motor_pos += motor_speed;
-      motor_pos = constrain(motor_pos, -110, 110);
+      motor_pos = constrain(motor_pos, -110, 110); //constrain(motor_pos, -110, 110)
       
       int pwm = constrain(K1 * robot_angle + K2 * gyroXfilt + K3 * motor_speed + K4 * motor_pos, -255, 255); 
-      Motor1_control(-pwm);
-
+      Motor1_control(-pwm*1.5);
+// Serial.print("vong: "); Serial.println(enc_count);
+//Serial.print("chieu:" );Serial.println(pos);
       if ((speed_value - speed_remote) > SPEED_LIMIT)
         speed_value -= SPEED_LIMIT;
       else if ((speed_value - speed_remote) < -SPEED_LIMIT)
@@ -406,7 +399,6 @@ void loop() {
       steering_servo.write(STEERING_CENTER);
       speed_value = 0;
       Motor1_control(0);
-      Serial.println(robot_angle);
       Motor2_control(0);
       motor_pos = 0;
     }
