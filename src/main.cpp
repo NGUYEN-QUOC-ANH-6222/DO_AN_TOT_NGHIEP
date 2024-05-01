@@ -193,7 +193,6 @@ void save() { //save value calid into EPPROM
 }
 
 void angle_calc() {//Done
-
   Wire.beginTransmission(MPU6050);
   Wire.write(GYRO_XOUT_H);
   Wire.endTransmission(false);
