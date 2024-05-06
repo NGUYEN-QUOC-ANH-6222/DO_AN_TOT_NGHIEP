@@ -233,7 +233,7 @@ void angle_calc() {  // Done
   robot_angle = robot_angle * Gyro_amount + Acc_angle * (1.0 - Gyro_amount);  // pitch = 0.96*(angle +GyroXangle/dt) + 0.4*(accelXangle)
 
   if (abs(robot_angle) > 10) vertical = false;  // 10
-  if (abs(robot_angle) < 0.5) vertical = true;  // 0.4
+  if (abs(robot_angle) < 0.3) vertical = true;  // 0.4
 }
 
 void angle_setup() {  // Angle calibration
@@ -392,7 +392,7 @@ void loop() {
       digitalWrite(BRAKE, HIGH);
       gyroX = GyX / 131.0;  // Convert to deg/s
 
-      gyroXfilt = alpha * gyroX + (1 - alpha) * gyroXfilt;  // filter
+      gyroXfilt = alpha * gyroX + (1 - alpha) * gyroXfilt;  // low pass fillter
 
       motor_pos += motor_speed;
       motor_pos = constrain(motor_pos, -110, 110);  // constrain(motor_pos, -110, 110)
