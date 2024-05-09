@@ -14,7 +14,7 @@
 
 #define STEERING_MAX 350
 #define SPEED_MAX 80
-#define STEERING_CENTER 1500
+#define STEERING_CENTER 1450
 #define ST_LIMIT 5
 #define SPEED_LIMIT 4
 
@@ -56,10 +56,10 @@ bool vertical = false;
 bool calibrating = false;
 bool calibrated = false;
 
-float K1 = 690;          // 115 //-4047//5
-float K2 = 300;         // 15 //-150
-float K3 = 0.5;      // 8 //-2
-float K4 = 0.1;        // 0.6
+float K1 = 400;          // 115 //-4047//5
+float K2 = 8.0;         // 15 //-150
+float K3 = 50.1;      // 8 //-2
+float K4 = 0.0006;        // 0.6
 float loop_time = 10;  // 10
 
 struct OffsetsObj {
@@ -135,7 +135,7 @@ void getJoystickState(byte data[8]) {
 
 void readControlParameters() {
   if (Serial.available()) {  // data received from smartphone
-    // delay(1);
+    // delay(1);j
     cmd[0] = Serial.read();
     if (cmd[0] == STX) {
       int i = 1;
@@ -224,8 +224,8 @@ void angle_calc() {  // Done
   Wire.requestFrom(MPU6050, 2, true);
   AcZ = Wire.read() << 8 | Wire.read();
 
-  AcYc = AcY - offsets.AcY;
-  AcZc = AcZ - offsets.AcZ;
+  AcYc = AcY - (-350); //offsets.AcY;
+  AcZc = AcZ - 31340; //offsets.AcZ;
   GyX -= GyX_offset;
 
   robot_angle += GyX * loop_time / 1000 / 65.536;  // calculate angle and convert to deg
@@ -233,7 +233,7 @@ void angle_calc() {  // Done
   robot_angle = robot_angle * Gyro_amount + Acc_angle * (1.0 - Gyro_amount);  // pitch = 0.96*(angle +GyroXangle/dt) + 0.4*(accelXangle)
 
   if (abs(robot_angle) > 10) vertical = false;  // 10
-  if (abs(robot_angle) < 0.3) vertical = true;  // 0.4
+  if (abs(robot_angle) < 0.4) vertical = true;  // 0.4
 }
 
 void angle_setup() {  // Angle calibration
@@ -347,7 +347,7 @@ void ENC_READ() {
 //
 
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(115200);
 
   // Pins D9 and D10 - 7.8 kHz
   TCCR1A = 0b00000001;
@@ -381,13 +381,12 @@ void loop() {
   currentT = millis();
 
   if (currentT - previousT_1 >= loop_time) {
-    //Tuning();
-    readControlParameters();
+    Tuning();
+    // readControlParameters();
     angle_calc();
-    Serial.println(robot_angle);
+    // Serial.println(robot_angle);
     motor_speed = -enc_count;
     enc_count = 0;
-
     if (vertical && calibrated && !calibrating) {
       digitalWrite(BRAKE, HIGH);
       gyroX = GyX / 131.0;  // Convert to deg/s
@@ -396,7 +395,7 @@ void loop() {
 
       motor_pos += motor_speed;
       motor_pos = constrain(motor_pos, -110, 110);  // constrain(motor_pos, -110, 110)
-
+// Serial.println(gyroXfilt);
       int pwm = constrain(K1 * robot_angle + K2 * gyroXfilt + K3 * motor_speed + K4 * motor_pos, -255, 255);
       Motor1_control(-pwm);
       // Serial.print("vong: "); Serial.println(enc_count);
