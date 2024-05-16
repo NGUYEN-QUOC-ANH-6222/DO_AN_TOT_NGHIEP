@@ -20,11 +20,9 @@ int angle_L = 90;
 ServoTimer2 my_servo;
 
 // define for MPU
-#define MPU6050 0x68       // Device address
-#define ACCEL_CONFIG 0x1C  // Accelerometer configuration address
-#define GYRO_CONFIG 0x1B   // Gyro configuration address
-
-// Registers: Accelerometer, Temp, Gyroscope
+#define MPU6050 0x68
+#define ACCEL_CONFIG 0x1C
+#define GYRO_CONFIG 0x1B   
 #define ACCEL_XOUT_H 0x3B
 #define ACCEL_XOUT_L 0x3C
 #define ACCEL_YOUT_H 0x3D
@@ -37,15 +35,10 @@ ServoTimer2 my_servo;
 #define GYRO_YOUT_L 0x46
 #define GYRO_ZOUT_H 0x47
 #define GYRO_ZOUT_L 0x48
-
-#define PWR_MGMT_1 0x6B
-#define PWR_MGMT_2 0x6C
-
 #define accSens 0   // 0 = 2g, 1 = 4g, 2 = 8g, 3 = 16g
 #define gyroSens 1  // 0 = 250rad/s, 1 = 500rad/s, 2 1000rad/s, 3 = 2000rad/s
-
-
-float Gyro_amount = 0.996;  // 0.996
+#define PWR_MGMT_1 0x6B
+#define PWR_MGMT_2 0x6C
 
 bool vertical = false;
 bool calibrating = false;
@@ -54,8 +47,12 @@ bool calibrated = false;
 float K1 = 400;          // 400 //-4047//5
 float K2 = 8;         // 8.0 //-150
 float K3 = 50;      // 50.1 //-2
-float K4 = 0.0006;        // 0.0006
-float alpha = 0.4;  // 0.4   `
+float K4 = 0.6;        // 0.0006
+
+float alpha = 0.4;  // 0.4  
+float Gyro_amount = 0.996;  // 0.996
+float robot_angle;
+float Acc_angle;
 
 struct OffsetsObj {
   int ID;
@@ -64,40 +61,36 @@ struct OffsetsObj {
 };
 OffsetsObj offsets;
 
-
 int16_t AcY, AcZ, GyX, gyroX, gyroXfilt;
 int16_t AcYc, AcZc;
 int16_t GyX_offset = 0;  // GyX's offset value
 int32_t GyX_offset_sum = 0;
 
-float robot_angle;
-float Acc_angle;
-
 volatile byte pos;
 volatile int motor_counter = 0, enc_count = 0;
 int16_t motor_speed;
 int32_t motor_pos;
+
 int speed_remote = 0, speed_value = 0;
 float loop_time = 10;  
 long currentT, previousT_1, previousT_2 = 0;
-
 unsigned long previousMillis = 0 ;
-SoftwareSerial bluetooth(0, 1); // Khai báo chân kết nối với module Bluetooth
 
+SoftwareSerial bluetooth(0, 1); // Khai báo chân kết nối với module Bluetooth
 char receivedChar = ' ';
 
-void Read_HC_05(){
+void Read_HC_05(){ //Đọc dữ liệu từ module HC-05
   if (bluetooth.available()) { // Kiểm tra nếu có dữ liệu nhận được từ Bluetooth
     receivedChar = bluetooth.read(); // Đọc dữ liệu nhận được từ Bluetooth
     Serial.println(receivedChar); // In dữ liệu nhận được ra Serial Monitor
   }
 }
 
-int cal_servo(int convert) {
+int cal_servo(int convert) {//Tính toán góc servo
  return map(convert, 0, 180, 750, 2250) -50;
 }
 
-void Homing_Sevor() {
+void Homing_Sevor() { //Góc homing cho servo
     my_servo.write(SERVO_CENTER);
 }
 
@@ -108,7 +101,7 @@ void writeTo(byte device, byte address, byte value) {
   Wire.endTransmission(true);
 }
 
-void save() {  // save value calid into EPPROM
+void save() {  //Lưu giá trị calib vào EPPROM
   EEPROM.put(0, offsets);
   delay(100);
   EEPROM.get(0, offsets);
@@ -117,7 +110,7 @@ void save() {  // save value calid into EPPROM
   Serial.println("calibrating off");
 }
 
-void angle_calc() {  // Done
+void angle_calc() {  //Đọc dữ liệu từ MPU và tính toán góc
   Wire.beginTransmission(MPU6050);
   Wire.write(GYRO_XOUT_H);
   Wire.endTransmission(false);
@@ -168,15 +161,15 @@ void angle_setup() {  // Angle calibration
   Serial.println(GyX_offset);
 }
 
-void Motor1_control(int sp) {
+void Motor1(int sp) {
   if (sp > 0)
     digitalWrite(DIR_1, LOW);
   else
     digitalWrite(DIR_1, HIGH);
-  analogWrite(PWM_1, 255 - abs(sp));  // 255
+  analogWrite(PWM_1, 255 - abs(sp)); 
 }
 
-void Motor2_control(int sp) {
+void Motor2(int sp) {
   if (sp > 0)
     digitalWrite(DIR_2, LOW);
   else
@@ -184,8 +177,8 @@ void Motor2_control(int sp) {
   analogWrite(PWM_2, 255 - abs(sp));
 }
 
-void printValues() {  // Done
-  Serial.print("K1: ");
+void printValues() {  //In hệ số matrix K
+  Serial.print(" K1: ");
   Serial.print(K1);
   Serial.print(" K2: ");
   Serial.print(K2);
@@ -195,12 +188,12 @@ void printValues() {  // Done
   Serial.println(K4, 4);
 }
 
-int Tuning() {
+int Calibration() { //Calib góc và matrix K
   if (!Serial.available()) return 0;
   delay(2);
-  char param = Serial.read();  // get parameter byte
+  char param = Serial.read();  
   if (!Serial.available()) return 0;
-  char cmd = Serial.read();  // get command byte
+  char cmd = Serial.read();  
   Serial.flush();
   switch (param) {
     case 'p':
@@ -243,7 +236,7 @@ int Tuning() {
   return 1;
 }
 
-void ENC_READ() {
+void ENCODER_READ() { //Đọc Encodeder 
   byte cur = (!digitalRead(ENC_1) << 1) + !digitalRead(ENC_2);
   byte old = pos & B00000011;
   byte dir = (pos & B00110000) >> 4;
@@ -272,23 +265,21 @@ void ENC_READ() {
 void setup() {
   Serial.begin(115200);
   bluetooth.begin(115200);
-
-  // Pins D9 and D10 - 7.8 kHz
-  TCCR1A = 0b00000001;
-  TCCR1B = 0b00001010;
   my_servo.attach(A3);
 
+  // Cấu hình Pin D9 và D10 - 7.8 kHz
+  TCCR1A = 0b00000001;
+  TCCR1B = 0b00001010;
   pinMode(DIR_1, OUTPUT);
   pinMode(DIR_2, OUTPUT);
   pinMode(BRAKE, OUTPUT);
   pinMode(ENC_1, INPUT);
   pinMode(ENC_2, INPUT);
 
-  Motor1_control(0);
-  Motor2_control(0);
-
-  attachInterrupt(0, ENC_READ, CHANGE);
-  attachInterrupt(1, ENC_READ, CHANGE);
+  Motor1(0);
+  Motor2(0);
+  attachInterrupt(0, ENCODER_READ, CHANGE);
+  attachInterrupt(1, ENCODER_READ, CHANGE);
   Homing_Sevor();
   
   EEPROM.get(0, offsets);
@@ -304,7 +295,7 @@ void loop() {
   currentT = millis();
 
   if (currentT - previousT_1 >= loop_time) {
-    // Tuning();
+    // Calibration();
     Read_HC_05();
     angle_calc();
     motor_speed = -enc_count;
@@ -313,12 +304,12 @@ void loop() {
       digitalWrite(BRAKE, HIGH);
 
       gyroX = GyX / 131.0;  // Convert to deg/s
-      gyroXfilt = alpha * gyroX + (1 - alpha) * gyroXfilt;  // low pass fillter
+      gyroXfilt = alpha * gyroX + (1 - alpha) * gyroXfilt;  // Lọc thông thấp cho MPU
       motor_pos += motor_speed;
-      motor_pos = constrain(motor_pos, -110, 110);  // constrain(motor_pos, -110, 110)
+      motor_pos = constrain(motor_pos, -110, 110); 
 
       int pwm = constrain(K1 * robot_angle + K2 * gyroXfilt + K3 * motor_speed + K4 * motor_pos, -255, 255);
-      Motor1_control(-pwm);
+      Motor1(-pwm);
       
       switch (receivedChar){
       case 'H':
@@ -328,7 +319,7 @@ void loop() {
         break;
       case 'S':
         digitalWrite(BRAKE, LOW);
-        Motor2_control(0);
+        Motor2(0);
         receivedChar = ' ';
         SPEED_MOTOR_2 = 0;
         break; 
@@ -336,7 +327,7 @@ void loop() {
         if (SPEED_MOTOR_2 <= SPEED_MAX_F && millis() - previousMillis >= loop_time)
         {
         digitalWrite(BRAKE, HIGH);
-        Motor2_control(SPEED_MOTOR_2++);
+        Motor2(SPEED_MOTOR_2++);
         previousMillis = millis();
         }
         break; 
@@ -344,7 +335,7 @@ void loop() {
         if (SPEED_MOTOR_2 >= SPEED_MAX_B && millis() - previousMillis >= loop_time)
         {
         digitalWrite(BRAKE, HIGH);
-        Motor2_control(SPEED_MOTOR_2--);
+        Motor2(SPEED_MOTOR_2--);
         previousMillis = millis();
         }
         break; 
@@ -365,8 +356,8 @@ void loop() {
       }
     } else {
       digitalWrite(BRAKE, LOW);
-      Motor1_control(0);
-      Motor2_control(0);
+      Motor1(0);
+      Motor2(0);
       motor_pos = 0;
     }
     previousT_1 = currentT;
