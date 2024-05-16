@@ -44,9 +44,9 @@ bool vertical = false;
 bool calibrating = false;
 bool calibrated = false;
 
-float K1 = 400;          // 400 //-4047//5
-float K2 = 8;         // 8.0 //-150
-float K3 = 50;      // 50.1 //-2
+float K1 = 200;          // 400 //-4047//5
+float K2 = 2;         // 8.0 //-150
+float K3 = 10;      // 50.1 //-2
 float K4 = 0.6;        // 0.0006
 
 float alpha = 0.4;  // 0.4  
@@ -295,8 +295,8 @@ void loop() {
   currentT = millis();
 
   if (currentT - previousT_1 >= loop_time) {
-    // Calibration();
-    Read_HC_05();
+    Calibration();
+    // Read_HC_05();
     angle_calc();
     motor_speed = -enc_count;
     enc_count = 0;
