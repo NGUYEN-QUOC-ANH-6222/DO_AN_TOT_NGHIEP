@@ -1,8 +1,8 @@
 #include <Arduino.h>
 #include <Wire.h>
-
 #include "EEPROM.h"
 #include "ServoTimer2.h"
+#include <SoftwareSerial.h>
 
 #define PWM_1 9
 #define PWM_2 10
@@ -12,11 +12,12 @@
 #define ENC_2 2
 #define BRAKE 8
 
-#define STEERING_MAX 350
-#define SPEED_MAX 80
-#define STEERING_CENTER 1450
-#define ST_LIMIT 5
-#define SPEED_LIMIT 4
+#define SERVO_CENTER 1450 //-50
+int SPEED_MOTOR_2 = 10;
+int SPEED_MAX_F = 50;
+int SPEED_MAX_B = -50;
+int angle_L = 90;
+ServoTimer2 my_servo;
 
 // define for MPU
 #define MPU6050 0x68       // Device address
@@ -43,12 +44,6 @@
 #define accSens 0   // 0 = 2g, 1 = 4g, 2 = 8g, 3 = 16g
 #define gyroSens 1  // 0 = 250rad/s, 1 = 500rad/s, 2 1000rad/s, 3 = 2000rad/s
 
-// Define for remote
-#define STX 0x02
-#define ETX 0x03
-byte cmd[8] = {0, 0, 0, 0, 0, 0, 0, 0};
-byte buttonStatus = 0;
-//
 
 float Gyro_amount = 0.996;  // 0.996
 
@@ -56,11 +51,11 @@ bool vertical = false;
 bool calibrating = false;
 bool calibrated = false;
 
-float K1 = 400;          // 115 //-4047//5
-float K2 = 8.0;         // 15 //-150
-float K3 = 50.1;      // 8 //-2
-float K4 = 0.0006;        // 0.6
-float loop_time = 10;  // 10
+float K1 = 400;          // 400 //-4047//5
+float K2 = 8;         // 8.0 //-150
+float K3 = 50;      // 50.1 //-2
+float K4 = 0.0006;        // 0.0006
+float alpha = 0.4;  // 0.4   `
 
 struct OffsetsObj {
   int ID;
@@ -69,10 +64,8 @@ struct OffsetsObj {
 };
 OffsetsObj offsets;
 
-float alpha = 0.4;  // 0.4
 
 int16_t AcY, AcZ, GyX, gyroX, gyroXfilt;
-
 int16_t AcYc, AcZc;
 int16_t GyX_offset = 0;  // GyX's offset value
 int32_t GyX_offset_sum = 0;
@@ -84,98 +77,28 @@ volatile byte pos;
 volatile int motor_counter = 0, enc_count = 0;
 int16_t motor_speed;
 int32_t motor_pos;
-int steering_remote = 0, speed_remote = 0, speed_value = 0, steering_value = STEERING_CENTER;
-
+int speed_remote = 0, speed_value = 0;
+float loop_time = 10;  
 long currentT, previousT_1, previousT_2 = 0;
 
-ServoTimer2 steering_servo;
+unsigned long previousMillis = 0 ;
+SoftwareSerial bluetooth(0, 1); // Khai báo chân kết nối với module Bluetooth
 
-// Line 104 - 180 from remote
-void getButtonState(int bStatus) {
-  switch (bStatus) {
-      // -----------------  BUTTON #1  -----------------------
-    case 'A':
-      buttonStatus |= B000001;  // ON
-      break;
-    case 'B':
-      buttonStatus &= B111110;  // OFF
-      break;
-      // -----------------  BUTTON #2  -----------------------
-    case 'C':
-      buttonStatus |= B000010;  // ON
-      break;
-    case 'D':
-      buttonStatus &= B111101;  // OFF
-      break;
+char receivedChar = ' ';
+
+void Read_HC_05(){
+  if (bluetooth.available()) { // Kiểm tra nếu có dữ liệu nhận được từ Bluetooth
+    receivedChar = bluetooth.read(); // Đọc dữ liệu nhận được từ Bluetooth
+    Serial.println(receivedChar); // In dữ liệu nhận được ra Serial Monitor
   }
 }
 
-// Chuyển đổi data ASCII sang số nguyên
-void getJoystickState(byte data[8]) {
-  int joyX = (data[1] - 48) * 100 + (data[2] - 48) * 10 + (data[3] - 48);  // obtain the Int from the ASCII representation
-  int joyY = (data[4] - 48) * 100 + (data[5] - 48) * 10 + (data[6] - 48);
-  joyX = joyX - 200;  // Offset to avoid
-  joyY = joyY - 200;  // transmitting negative numbers
-
-  if (joyX < -100 || joyX > 100 || joyY < -100 || joyY > 100)
-    return;                       // commmunication error
-  if (joyX < -10 || joyX > 10) {  // dead zone
-    if (joyX > 0)                 // exponential
-      steering_remote = (-joyX * joyX + 0.1 * joyX) / 100.0;
-    else
-      steering_remote = (joyX * joyX + 0.1 * joyX) / 100.0;
-  } else
-    steering_remote = 0;
-  steering_remote = -map(steering_remote, -100, 100, -STEERING_MAX, STEERING_MAX);
-  if (joyY < -10 || joyY > 10)  // dead zone
-    speed_remote = map(joyY, 100, -100, SPEED_MAX, -SPEED_MAX);
-  else
-    speed_remote = 0;
+int cal_servo(int convert) {
+ return map(convert, 0, 180, 750, 2250) -50;
 }
 
-void readControlParameters() {
-  if (Serial.available()) {  // data received from smartphone
-    // delay(1);j
-    cmd[0] = Serial.read();
-    if (cmd[0] == STX) {
-      int i = 1;
-      while (Serial.available()) {
-        // delay(1);
-        cmd[i] = Serial.read();
-        if (cmd[i] > 127 || i > 7) break;  // Communication error
-        if ((cmd[i] == ETX) && (i == 2 || i == 7))
-          break;  // Button or Joystick data
-        i++;
-      }
-      if (i == 2)
-        getButtonState(cmd[1]);  // 3 Bytes  ex: < STX "C" ETX >
-      else if (i == 7)
-        getJoystickState(cmd);  // 6 Bytes  ex: < STX "200" "180" ETX >
-    }
-  }
-}
-
-String getButtonStatusString() {
-  String bStatus = "";
-  for (int i = 0; i < 6; i++) {
-    if (buttonStatus & (B100000 >> i))
-      bStatus += "1";
-    else
-      bStatus += "0";
-  }
-  return bStatus;
-}
-
-void sendControlParameters() {
-  Serial.print((char)STX);  // Start of Transmission
-  Serial.print(getButtonStatusString());
-  Serial.print((char)0x1);  // buttons status feedback
-  Serial.print(0);
-  Serial.print((char)0x4);  // datafield #1
-  Serial.print(0);
-  Serial.print((char)0x5);  // datafield #2
-  Serial.print(0);          // datafield #3
-  Serial.print((char)ETX);  // End of Transmission
+void Homing_Sevor() {
+    my_servo.write(SERVO_CENTER);
 }
 
 void writeTo(byte device, byte address, byte value) {
@@ -183,17 +106,6 @@ void writeTo(byte device, byte address, byte value) {
   Wire.write(address);
   Wire.write(value);
   Wire.endTransmission(true);
-}
-
-void printValues() {  // Done
-  Serial.print("K1: ");
-  Serial.print(K1);
-  Serial.print(" K2: ");
-  Serial.print(K2);
-  Serial.print(" K3: ");
-  Serial.print(K3, 4);
-  Serial.print(" K4: ");
-  Serial.println(K4, 4);
 }
 
 void save() {  // save value calid into EPPROM
@@ -224,8 +136,11 @@ void angle_calc() {  // Done
   Wire.requestFrom(MPU6050, 2, true);
   AcZ = Wire.read() << 8 | Wire.read();
 
-  AcYc = AcY - (-350); //offsets.AcY;
-  AcZc = AcZ - 31340; //offsets.AcZ;
+  // AcYc = AcY - 308; 
+  // AcZc = AcZ - 31340; 
+  // GyX -= -665; //GyX_offset
+  AcYc = AcY - offsets.AcY;
+  AcZc = AcZ - offsets.AcZ;
   GyX -= GyX_offset;
 
   robot_angle += GyX * loop_time / 1000 / 65.536;  // calculate angle and convert to deg
@@ -240,8 +155,7 @@ void angle_setup() {  // Angle calibration
   Wire.begin();
   delay(100);
   writeTo(MPU6050, PWR_MGMT_1, 0);
-  writeTo(MPU6050, ACCEL_CONFIG,
-          accSens << 3);  // Specifying output scaling of accelerometer
+  writeTo(MPU6050, ACCEL_CONFIG, accSens << 3);  // Specifying output scaling of accelerometer
   delay(100);
 
   for (int i = 0; i < 1024; i++) {
@@ -270,6 +184,17 @@ void Motor2_control(int sp) {
   analogWrite(PWM_2, 255 - abs(sp));
 }
 
+void printValues() {  // Done
+  Serial.print("K1: ");
+  Serial.print(K1);
+  Serial.print(" K2: ");
+  Serial.print(K2);
+  Serial.print(" K3: ");
+  Serial.print(K3, 4);
+  Serial.print(" K4: ");
+  Serial.println(K4, 4);
+}
+
 int Tuning() {
   if (!Serial.available()) return 0;
   delay(2);
@@ -279,8 +204,8 @@ int Tuning() {
   Serial.flush();
   switch (param) {
     case 'p':
-      if (cmd == '+') K1 += 1;
-      if (cmd == '-') K1 -= 1;
+      if (cmd == '+') K1 += 5;
+      if (cmd == '-') K1 -= 5;
       printValues();
       break;
     case 'i':
@@ -289,8 +214,8 @@ int Tuning() {
       printValues();
       break;
     case 's':
-      if (cmd == '+') K3 += 0.2;
-      if (cmd == '-') K3 -= 0.2;
+      if (cmd == '+') K3 += 1.0;
+      if (cmd == '-') K3 -= 1.0;
       printValues();
       break;
     case 'a':
@@ -337,24 +262,21 @@ void ENC_READ() {
           enc_count--;
         else if (dir == 3 && old == 1)
           enc_count++;
-        //  Serial.print("chieu:" );Serial.println(dir);
         dir = 0;
       }
     }
     pos = (dir << 4) + (old << 2) + cur;
   }
 }
-//
 
 void setup() {
   Serial.begin(115200);
+  bluetooth.begin(115200);
 
   // Pins D9 and D10 - 7.8 kHz
   TCCR1A = 0b00000001;
   TCCR1B = 0b00001010;
-
-  steering_servo.attach(A3);
-  steering_servo.write(STEERING_CENTER);
+  my_servo.attach(A3);
 
   pinMode(DIR_1, OUTPUT);
   pinMode(DIR_2, OUTPUT);
@@ -367,7 +289,8 @@ void setup() {
 
   attachInterrupt(0, ENC_READ, CHANGE);
   attachInterrupt(1, ENC_READ, CHANGE);
-
+  Homing_Sevor();
+  
   EEPROM.get(0, offsets);
   if (offsets.ID == 35)
     calibrated = true;
@@ -381,45 +304,67 @@ void loop() {
   currentT = millis();
 
   if (currentT - previousT_1 >= loop_time) {
-    Tuning();
-    // readControlParameters();
+    // Tuning();
+    Read_HC_05();
     angle_calc();
-    // Serial.println(robot_angle);
     motor_speed = -enc_count;
     enc_count = 0;
     if (vertical && calibrated && !calibrating) {
       digitalWrite(BRAKE, HIGH);
+
       gyroX = GyX / 131.0;  // Convert to deg/s
-
       gyroXfilt = alpha * gyroX + (1 - alpha) * gyroXfilt;  // low pass fillter
-
       motor_pos += motor_speed;
       motor_pos = constrain(motor_pos, -110, 110);  // constrain(motor_pos, -110, 110)
-// Serial.println(gyroXfilt);
+
       int pwm = constrain(K1 * robot_angle + K2 * gyroXfilt + K3 * motor_speed + K4 * motor_pos, -255, 255);
       Motor1_control(-pwm);
-      // Serial.print("vong: "); Serial.println(enc_count);
-      // Serial.print("chieu:" );Serial.println(pos);
-      if ((speed_value - speed_remote) > SPEED_LIMIT)
-        speed_value -= SPEED_LIMIT;
-      else if ((speed_value - speed_remote) < -SPEED_LIMIT)
-        speed_value += SPEED_LIMIT;
-      else
-        speed_value = speed_remote;
-      if ((steering_value - STEERING_CENTER - steering_remote) > ST_LIMIT)
-        steering_value -= ST_LIMIT;
-      else if ((steering_value - STEERING_CENTER - steering_remote) < -ST_LIMIT)
-        steering_value += ST_LIMIT;
-      else
-        steering_value = STEERING_CENTER + steering_remote;
-
-      steering_servo.write(steering_value);
-      Motor2_control(speed_value);
+      
+      switch (receivedChar){
+      case 'H':
+        Homing_Sevor();
+        angle_L = 90;
+        receivedChar = ' ';
+        break;
+      case 'S':
+        digitalWrite(BRAKE, LOW);
+        Motor2_control(0);
+        receivedChar = ' ';
+        SPEED_MOTOR_2 = 0;
+        break; 
+      case 'F':
+        if (SPEED_MOTOR_2 <= SPEED_MAX_F && millis() - previousMillis >= loop_time)
+        {
+        digitalWrite(BRAKE, HIGH);
+        Motor2_control(SPEED_MOTOR_2++);
+        previousMillis = millis();
+        }
+        break; 
+      case 'B':
+        if (SPEED_MOTOR_2 >= SPEED_MAX_B && millis() - previousMillis >= loop_time)
+        {
+        digitalWrite(BRAKE, HIGH);
+        Motor2_control(SPEED_MOTOR_2--);
+        previousMillis = millis();
+        }
+        break; 
+      case 'R':
+        if (angle_L <= 135 && millis() - previousMillis >= loop_time)
+        {
+        my_servo.write(cal_servo(angle_L++));
+        previousMillis = millis();
+        }
+        break; 
+      case 'L':
+        if (angle_L >= 45 && millis() - previousMillis >= loop_time)
+        {
+        my_servo.write(cal_servo(angle_L--));
+        previousMillis = millis();
+        }
+        break; 
+      }
     } else {
       digitalWrite(BRAKE, LOW);
-      steering_value = STEERING_CENTER;
-      steering_servo.write(STEERING_CENTER);
-      speed_value = 0;
       Motor1_control(0);
       Motor2_control(0);
       motor_pos = 0;
