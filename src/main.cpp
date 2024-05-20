@@ -44,11 +44,20 @@ bool vertical = false;
 bool calibrating = false;
 bool calibrated = false;
 
-float K1 = 200;          // 400 //-4047//5
-float K2 = 2;         // 8.0 //-150
-float K3 = 10;      // 50.1 //-2
-float K4 = 0.6;        // 0.0006
+// Matrix K - LQR controler
+float K1 = 250;          // 400 //-4047//5
+float K2 = 10;         // 8.0 //-150
+float K3 = 30;      // 50.1 //-2
+float K4 = 0.006;        // 0.0006
 
+// PID controler
+float Kp = 138;  // Proportional gain
+float Ki = 0;   // Integral gain
+float Kd = 2;   // Derivative gain
+float S = 30;
+float P = 0.006;
+
+int pwm = 0;
 float alpha = 0.4;  // 0.4  
 float Gyro_amount = 0.996;  // 0.996
 float robot_angle;
@@ -75,6 +84,10 @@ int speed_remote = 0, speed_value = 0;
 float loop_time = 10;  
 long currentT, previousT_1, previousT_2 = 0;
 unsigned long previousMillis = 0 ;
+
+// PID control variables
+float previous_error = 0;
+float integral = 0;
 
 SoftwareSerial bluetooth(0, 1); // Khai báo chân kết nối với module Bluetooth
 char receivedChar = ' ';
@@ -177,7 +190,7 @@ void Motor2(int sp) {
   analogWrite(PWM_2, 255 - abs(sp));
 }
 
-void printValues() {  //In hệ số matrix K
+void printValues_LQR() {  //In hệ số matrix K
   Serial.print(" K1: ");
   Serial.print(K1);
   Serial.print(" K2: ");
@@ -188,6 +201,19 @@ void printValues() {  //In hệ số matrix K
   Serial.println(K4, 4);
 }
 
+void printValues_PID() {  // Print PID values
+  Serial.print(" Kp: ");
+  Serial.print(Kp);
+  Serial.print(" Ki: ");
+  Serial.print(Ki);
+  Serial.print(" Kd: ");
+  Serial.print(Kd);
+  Serial.print(" S: ");
+  Serial.print(S);
+  Serial.print(" P: ");
+  Serial.println(P);
+}
+
 int Calibration() { //Calib góc và matrix K
   if (!Serial.available()) return 0;
   delay(2);
@@ -196,25 +222,50 @@ int Calibration() { //Calib góc và matrix K
   char cmd = Serial.read();  
   Serial.flush();
   switch (param) {
-    case 'p':
+    case 'o':
       if (cmd == '+') K1 += 5;
       if (cmd == '-') K1 -= 5;
-      printValues();
+      printValues_LQR();
       break;
-    case 'i':
+    case 't':
       if (cmd == '+') K2 += 0.5;
       if (cmd == '-') K2 -= 0.5;
-      printValues();
+      printValues_LQR();
       break;
-    case 's':
+    case 'r':
       if (cmd == '+') K3 += 1.0;
       if (cmd == '-') K3 -= 1.0;
-      printValues();
+      printValues_LQR();
       break;
     case 'a':
       if (cmd == '+') K4 += 0.05;
       if (cmd == '-') K4 -= 0.05;
-      printValues();
+      printValues_LQR();
+      break;
+    case 'p':
+      if (cmd == '+') Kp += 1;
+      if (cmd == '-') Kp -= 1;
+      printValues_PID();
+      break;
+    case 'i':
+      if (cmd == '+') Ki += 0.1;
+      if (cmd == '-') Ki -= 0.1;
+      printValues_PID();
+      break;
+    case 'd':
+      if (cmd == '+') Kd += 0.1;
+      if (cmd == '-') Kd -= 0.1;
+      printValues_PID();
+      break;
+    case 's':
+      if (cmd == '+') S += 0.5;
+      if (cmd == '-') S -= 0.5;
+      printValues_PID();
+      break;
+    case 'v':
+      if (cmd == '+') P += 0.001;
+      if (cmd == '-') P -= 0.001;
+      printValues_PID();
       break;
     case 'c':
       if (cmd == '+' && !calibrating) {
@@ -295,8 +346,8 @@ void loop() {
   currentT = millis();
 
   if (currentT - previousT_1 >= loop_time) {
-    Calibration();
-    // Read_HC_05();
+    // Calibration();
+    Read_HC_05();
     angle_calc();
     motor_speed = -enc_count;
     enc_count = 0;
@@ -308,7 +359,16 @@ void loop() {
       motor_pos += motor_speed;
       motor_pos = constrain(motor_pos, -110, 110); 
 
-      int pwm = constrain(K1 * robot_angle + K2 * gyroXfilt + K3 * motor_speed + K4 * motor_pos, -255, 255);
+      // LQR control
+      // pwm = constrain(K1 * robot_angle + K2 * gyroXfilt + K3 * motor_speed + K4 * motor_pos, -255, 255);
+
+      // LQR control
+      float error = robot_angle;
+      integral += error * loop_time / 1000.0;
+      float derivative = (error - previous_error) / (loop_time / 1000.0);
+      pwm = constrain(Kp * error + Ki * integral + Kd * derivative + S*motor_speed + P*motor_pos, -255, 255);  
+      previous_error = error; 
+
       Motor1(-pwm);
       
       switch (receivedChar){
@@ -370,3 +430,6 @@ void loop() {
     previousT_2 = currentT;
   }
 }
+
+
+
