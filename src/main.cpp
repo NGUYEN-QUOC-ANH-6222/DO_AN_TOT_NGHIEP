@@ -13,9 +13,9 @@
 #define BRAKE 8
 
 #define SERVO_CENTER 1450 //-50
-int SPEED_MOTOR_2 = 10;
-int SPEED_MAX_F = 50;
-int SPEED_MAX_B = -50;
+int SPEED_MOTOR_2 = 20;
+int SPEED_MAX_F = 70;
+int SPEED_MAX_B = -70;
 int angle_L = 90;
 ServoTimer2 my_servo;
 
@@ -45,9 +45,15 @@ bool calibrating = false;
 bool calibrated = false;
 
 // Matrix K - LQR controler
-float K1 = 250;          // 400 //-4047//5
-float K2 = 10;         // 8.0 //-150
-float K3 = 30;      // 50.1 //-2
+
+// float K1 = 250;          // 400 //-4047//5
+// float K2 = 10;         // 8.0 //-150
+// float K3 = 30;      // 50.1 //-2
+// float K4 = 0.006;        // 0.0006
+
+float K1 = 100;          // 400 //-4047//5
+float K2 = 9;         // 8.0 //-150
+float K3 = 53;      // 50.1 //-2
 float K4 = 0.006;        // 0.0006
 
 // PID controler
@@ -142,12 +148,10 @@ void angle_calc() {  //Đọc dữ liệu từ MPU và tính toán góc
   Wire.requestFrom(MPU6050, 2, true);
   AcZ = Wire.read() << 8 | Wire.read();
 
-  // AcYc = AcY - 308; 
-  // AcZc = AcZ - 31340; 
-  // GyX -= -665; //GyX_offset
   AcYc = AcY - offsets.AcY;
   AcZc = AcZ - offsets.AcZ;
   GyX -= GyX_offset;
+ 
 
   robot_angle += GyX * loop_time / 1000 / 65.536;  // calculate angle and convert to deg
   Acc_angle = -atan2(AcYc, -AcZc)*57.2958;  // calculate angle and convert from rad to deg (180/pi)
@@ -188,6 +192,52 @@ void Motor2(int sp) {
   else
     digitalWrite(DIR_2, HIGH);
   analogWrite(PWM_2, 255 - abs(sp));
+}
+
+void conntrol_servo(){
+      switch (receivedChar){
+      case 'H':
+        Homing_Sevor();
+        angle_L = 90;
+        receivedChar = ' ';
+        break;
+      case 'S':
+        digitalWrite(BRAKE, LOW);
+        Motor2(0);
+        receivedChar = ' ';
+        SPEED_MOTOR_2 = 0;
+        break; 
+      case 'F':
+        if (SPEED_MOTOR_2 <= SPEED_MAX_F && millis() - previousMillis >= loop_time)
+        {
+        digitalWrite(BRAKE, HIGH);
+        Motor2(SPEED_MOTOR_2++);
+        previousMillis = millis();
+        }
+        break; 
+      case 'B':
+        if (SPEED_MOTOR_2 >= SPEED_MAX_B && millis() - previousMillis >= loop_time)
+        {
+        digitalWrite(BRAKE, HIGH);
+        Motor2(SPEED_MOTOR_2--);
+        previousMillis = millis();
+        }
+        break; 
+      case 'R':
+        if (angle_L <= 135 && millis() - previousMillis >= loop_time)
+        {
+        my_servo.write(cal_servo(angle_L++));
+        previousMillis = millis();
+        }
+        break; 
+      case 'L':
+        if (angle_L >= 45 && millis() - previousMillis >= loop_time)
+        {
+        my_servo.write(cal_servo(angle_L--));
+        previousMillis = millis();
+        }
+        break; 
+      }
 }
 
 void printValues_LQR() {  //In hệ số matrix K
@@ -346,8 +396,8 @@ void loop() {
   currentT = millis();
 
   if (currentT - previousT_1 >= loop_time) {
-    // Calibration();
-    Read_HC_05();
+    Calibration();
+    // Read_HC_05();
     angle_calc();
     motor_speed = -enc_count;
     enc_count = 0;
@@ -359,61 +409,21 @@ void loop() {
       motor_pos += motor_speed;
       motor_pos = constrain(motor_pos, -110, 110); 
 
-      // LQR control
-      // pwm = constrain(K1 * robot_angle + K2 * gyroXfilt + K3 * motor_speed + K4 * motor_pos, -255, 255);
+//------------------------------LQR CONTROLER----------------------------------//
+      pwm = constrain(K1 * robot_angle + K2 * gyroXfilt + K3 * motor_speed + K4 * motor_pos, -255, 255);
+//-----------------------------------------------------------------------------//
 
-      // LQR control
-      float error = robot_angle;
-      integral += error * loop_time / 1000.0;
-      float derivative = (error - previous_error) / (loop_time / 1000.0);
-      pwm = constrain(Kp * error + Ki * integral + Kd * derivative + S*motor_speed + P*motor_pos, -255, 255);  
-      previous_error = error; 
+//------------------------------PID CONTROLER----------------------------------//
+      // float error = robot_angle;
+      // integral += error * loop_time / 1000.0;
+      // float derivative = (error - previous_error) / (loop_time / 1000.0);
+      // pwm = constrain(Kp * error + Ki * integral + Kd * derivative + S*motor_speed + P*motor_pos, -255, 255);  
+      // previous_error = error; 
+//-----------------------------------------------------------------------------//
 
       Motor1(-pwm);
+      conntrol_servo();
       
-      switch (receivedChar){
-      case 'H':
-        Homing_Sevor();
-        angle_L = 90;
-        receivedChar = ' ';
-        break;
-      case 'S':
-        digitalWrite(BRAKE, LOW);
-        Motor2(0);
-        receivedChar = ' ';
-        SPEED_MOTOR_2 = 0;
-        break; 
-      case 'F':
-        if (SPEED_MOTOR_2 <= SPEED_MAX_F && millis() - previousMillis >= loop_time)
-        {
-        digitalWrite(BRAKE, HIGH);
-        Motor2(SPEED_MOTOR_2++);
-        previousMillis = millis();
-        }
-        break; 
-      case 'B':
-        if (SPEED_MOTOR_2 >= SPEED_MAX_B && millis() - previousMillis >= loop_time)
-        {
-        digitalWrite(BRAKE, HIGH);
-        Motor2(SPEED_MOTOR_2--);
-        previousMillis = millis();
-        }
-        break; 
-      case 'R':
-        if (angle_L <= 135 && millis() - previousMillis >= loop_time)
-        {
-        my_servo.write(cal_servo(angle_L++));
-        previousMillis = millis();
-        }
-        break; 
-      case 'L':
-        if (angle_L >= 45 && millis() - previousMillis >= loop_time)
-        {
-        my_servo.write(cal_servo(angle_L--));
-        previousMillis = millis();
-        }
-        break; 
-      }
     } else {
       digitalWrite(BRAKE, LOW);
       Motor1(0);
@@ -430,6 +440,4 @@ void loop() {
     previousT_2 = currentT;
   }
 }
-
-
 
