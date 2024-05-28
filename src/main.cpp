@@ -3,6 +3,9 @@
 #include "EEPROM.h"
 #include "ServoTimer2.h"
 #include <SoftwareSerial.h>
+#include <SPI.h>
+#include <SdFat.h>
+
 
 #define PWM_1 9
 #define PWM_2 10
@@ -13,9 +16,9 @@
 #define BRAKE 8
 
 #define SERVO_CENTER 1450 //-50
-int SPEED_MOTOR_2 = 20;
-int SPEED_MAX_F = 70;
-int SPEED_MAX_B = -70;
+int SPEED_MOTOR_2 = 50;
+int SPEED_MAX_F = 150;
+int SPEED_MAX_B = -150;
 int angle_L = 90;
 ServoTimer2 my_servo;
 
@@ -61,7 +64,7 @@ float Kp = 138;  // Proportional gain
 float Ki = 0;   // Integral gain
 float Kd = 2;   // Derivative gain
 float S = 30;
-float P = 0.006;
+float P = 0.0006;
 
 int pwm = 0;
 float alpha = 0.4;  // 0.4  
@@ -85,23 +88,39 @@ volatile byte pos;
 volatile int motor_counter = 0, enc_count = 0;
 int16_t motor_speed;
 int32_t motor_pos;
+float t_s, speed_rad;
 
 int speed_remote = 0, speed_value = 0;
 float loop_time = 10;  
-long currentT, previousT_1, previousT_2 = 0;
-unsigned long previousMillis = 0 ;
+long currentT, previousT_1, previousT_2 = 10;
+unsigned long previousMillis = 0;
 
 // PID control variables
 float previous_error = 0;
 float integral = 0;
 
-SoftwareSerial bluetooth(0, 1); // Khai báo chân kết nối với module Bluetooth
+// Set chân CS cho Micro SD card Adapter
+const int chipSelect = 6;
+
+float filtf;
+
+SoftwareSerial bluetooth(0, 1); // Khai báo chân giao tiếp UART với module Bluetooth
 char receivedChar = ' ';
+
+
+SdFat SD;
+SdFile dataFile;
+
+ unsigned long current_time = 0;
+unsigned long previous_sdcard = 0;
+const unsigned long sd_interval = 150;
+
+
 
 void Read_HC_05(){ //Đọc dữ liệu từ module HC-05
   if (bluetooth.available()) { // Kiểm tra nếu có dữ liệu nhận được từ Bluetooth
     receivedChar = bluetooth.read(); // Đọc dữ liệu nhận được từ Bluetooth
-    Serial.println(receivedChar); // In dữ liệu nhận được ra Serial Monitor
+    // Serial.println(receivedChar); // In dữ liệu nhận được ra Serial Monitor
   }
 }
 
@@ -156,8 +175,8 @@ void angle_calc() {  //Đọc dữ liệu từ MPU và tính toán góc
   robot_angle += GyX * loop_time / 1000 / 65.536;  // calculate angle and convert to deg
   Acc_angle = -atan2(AcYc, -AcZc)*57.2958;  // calculate angle and convert from rad to deg (180/pi)
   robot_angle = robot_angle * Gyro_amount + Acc_angle * (1.0 - Gyro_amount);  // pitch = 0.96*(angle +GyroXangle/dt) + 0.4*(accelXangle)
-
-  if (abs(robot_angle) > 10) vertical = false;  // 10
+filtf = 0.1 * robot_angle + (1 - 0.1) * filtf;
+  if (abs(robot_angle) > 100) vertical = false;  // 10
   if (abs(robot_angle) < 0.4) vertical = true;  // 0.4
 }
 
@@ -363,12 +382,14 @@ void ENCODER_READ() { //Đọc Encodeder
   }
 }
 
+
+
 void setup() {
   Serial.begin(115200);
   bluetooth.begin(115200);
   my_servo.attach(A3);
 
-  // Cấu hình Pin D9 và D10 - 7.8 kHz
+  // Cấu hình Pin D9 và D10 - 7.8 kHz, tần số cao làm giảm tiếng ồn động cơ
   TCCR1A = 0b00000001;
   TCCR1B = 0b00001010;
   pinMode(DIR_1, OUTPUT);
@@ -376,13 +397,31 @@ void setup() {
   pinMode(BRAKE, OUTPUT);
   pinMode(ENC_1, INPUT);
   pinMode(ENC_2, INPUT);
+  pinMode(chipSelect, OUTPUT);
 
   Motor1(0);
   Motor2(0);
   attachInterrupt(0, ENCODER_READ, CHANGE);
   attachInterrupt(1, ENCODER_READ, CHANGE);
   Homing_Sevor();
+    
   
+  // Khởi tạo thẻ SD
+  if (!SD.begin(chipSelect, SPI_FULL_SPEED)) {
+      Serial.println("SD card initialization failed!");
+    return;
+  }
+  Serial.println("SD card initialized.");
+
+  // Tạo file CSV và lưu dữ liệu
+ if (!dataFile.open("data.csv", FILE_WRITE)) {
+    Serial.println("Error opening data.csv");
+  } else {
+    dataFile.println("Timestamp, Angle");
+    dataFile.close();
+  }
+
+
   EEPROM.get(0, offsets);
   if (offsets.ID == 35)
     calibrated = true;
@@ -390,16 +429,22 @@ void setup() {
     calibrated = false;
   delay(3000);
   angle_setup();
+
 }
 
 void loop() {
   currentT = millis();
 
   if (currentT - previousT_1 >= loop_time) {
-    Calibration();
-    // Read_HC_05();
+    // Calibration();
+    Read_HC_05();
     angle_calc();
     motor_speed = -enc_count;
+    
+    // Convert v/s sang rad/s
+    t_s = 1 / float(motor_speed);
+    speed_rad = (2 * 3.14) / t_s; 
+
     enc_count = 0;
     if (vertical && calibrated && !calibrating) {
       digitalWrite(BRAKE, HIGH);
@@ -410,20 +455,42 @@ void loop() {
       motor_pos = constrain(motor_pos, -110, 110); 
 
 //------------------------------LQR CONTROLER----------------------------------//
-      pwm = constrain(K1 * robot_angle + K2 * gyroXfilt + K3 * motor_speed + K4 * motor_pos, -255, 255);
+      // pwm = constrain(K1 * robot_angle + K2 * gyroXfilt + K3 * motor_speed + K4 * motor_pos, -255, 255);
 //-----------------------------------------------------------------------------//
 
 //------------------------------PID CONTROLER----------------------------------//
-      // float error = robot_angle;
-      // integral += error * loop_time / 1000.0;
-      // float derivative = (error - previous_error) / (loop_time / 1000.0);
-      // pwm = constrain(Kp * error + Ki * integral + Kd * derivative + S*motor_speed + P*motor_pos, -255, 255);  
-      // previous_error = error; 
+      float error = robot_angle;
+      integral += error * loop_time / 1000.0;
+      float derivative = (error - previous_error) / (loop_time / 1000.0);
+      pwm = constrain(Kp * error + Ki * integral + Kd * derivative + S*motor_speed + P*motor_pos, -255, 255);  
+      previous_error = error; 
 //-----------------------------------------------------------------------------//
+  
+
+  //  // Ghi giá trị vào file CSV
+    if (millis() - previous_sdcard >= sd_interval)
+    {
+      previous_sdcard = millis();      
+       
+      if (dataFile.open("data.csv", FILE_WRITE)) {
+      dataFile.print(millis());
+      dataFile.print(",");
+      dataFile.println(robot_angle);
+      dataFile.close();
+      }else {
+      Serial.println("Error opening data.csv");
+    }
+    }
+
+      // Serial.print(speed_rad);
+      // Serial.print("/");
+      // Serial.println(robot_angle);
+
 
       Motor1(-pwm);
       conntrol_servo();
-      
+
+
     } else {
       digitalWrite(BRAKE, LOW);
       Motor1(0);
