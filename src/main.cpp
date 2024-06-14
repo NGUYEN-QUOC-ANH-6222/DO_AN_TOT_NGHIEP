@@ -6,7 +6,6 @@
 #include <SPI.h>
 #include <SdFat.h>
 
-
 #define PWM_1 9
 #define PWM_2 10
 #define DIR_1 7
@@ -22,7 +21,7 @@ int SPEED_MAX_B = -150;
 int angle_L = 90;
 ServoTimer2 my_servo;
 
-// define for MPU
+// cấu hình MPU
 #define MPU6050 0x68
 #define ACCEL_CONFIG 0x1C
 #define GYRO_CONFIG 0x1B   
@@ -47,19 +46,16 @@ bool vertical = false;
 bool calibrating = false;
 bool calibrated = false;
 
-// Matrix K - LQR controler
+// Value LQR controler
+// float K1 = 100;         
+// float K2 = 12;        
+// float K3 = 22; 
+float K1 = 60;         
+float K2 = 5;        
+float K3 = 40;     
+float K4 = 0.0006;      
 
-// float K1 = 250;          // 400 //-4047//5
-// float K2 = 10;         // 8.0 //-150
-// float K3 = 30;      // 50.1 //-2
-// float K4 = 0.006;        // 0.0006
-
-float K1 = 100;          // 400 //-4047//5
-float K2 = 9;         // 8.0 //-150
-float K3 = 53;      // 50.1 //-2
-float K4 = 0.006;        // 0.0006
-
-// PID controler
+// Value PID controler
 float Kp = 138;  // Proportional gain
 float Ki = 0;   // Integral gain
 float Kd = 2;   // Derivative gain
@@ -67,8 +63,8 @@ float S = 30;
 float P = 0.0006;
 
 int pwm = 0;
-float alpha = 0.4;  // 0.4  
-float Gyro_amount = 0.996;  // 0.996
+float alpha = 0.4; 
+float Gyro_amount = 0.996;  
 float robot_angle;
 float Acc_angle;
 
@@ -81,7 +77,7 @@ OffsetsObj offsets;
 
 int16_t AcY, AcZ, GyX, gyroX, gyroXfilt;
 int16_t AcYc, AcZc;
-int16_t GyX_offset = 0;  // GyX's offset value
+int16_t GyX_offset = 0; 
 int32_t GyX_offset_sum = 0;
 
 volatile byte pos;
@@ -111,16 +107,14 @@ char receivedChar = ' ';
 SdFat SD;
 SdFile dataFile;
 
- unsigned long current_time = 0;
+unsigned long current_time = 0;
 unsigned long previous_sdcard = 0;
 const unsigned long sd_interval = 150;
-
-
 
 void Read_HC_05(){ //Đọc dữ liệu từ module HC-05
   if (bluetooth.available()) { // Kiểm tra nếu có dữ liệu nhận được từ Bluetooth
     receivedChar = bluetooth.read(); // Đọc dữ liệu nhận được từ Bluetooth
-    // Serial.println(receivedChar); // In dữ liệu nhận được ra Serial Monitor
+    Serial.println(receivedChar); // In dữ liệu nhận được ra Serial Monitor
   }
 }
 
@@ -175,7 +169,6 @@ void angle_calc() {  //Đọc dữ liệu từ MPU và tính toán góc
   robot_angle += GyX * loop_time / 1000 / 65.536;  // calculate angle and convert to deg
   Acc_angle = -atan2(AcYc, -AcZc)*57.2958;  // calculate angle and convert from rad to deg (180/pi)
   robot_angle = robot_angle * Gyro_amount + Acc_angle * (1.0 - Gyro_amount);  // pitch = 0.96*(angle +GyroXangle/dt) + 0.4*(accelXangle)
-filtf = 0.1 * robot_angle + (1 - 0.1) * filtf;
   if (abs(robot_angle) > 100) vertical = false;  // 10
   if (abs(robot_angle) < 0.4) vertical = true;  // 0.4
 }
@@ -184,7 +177,7 @@ void angle_setup() {  // Angle calibration
   Wire.begin();
   delay(100);
   writeTo(MPU6050, PWR_MGMT_1, 0);
-  writeTo(MPU6050, ACCEL_CONFIG, accSens << 3);  // Specifying output scaling of accelerometer
+  writeTo(MPU6050, ACCEL_CONFIG, accSens << 3);  
   delay(100);
 
   for (int i = 0; i < 1024; i++) {
@@ -193,8 +186,8 @@ void angle_setup() {  // Angle calibration
     delay(3);
   }
   GyX_offset = GyX_offset_sum >> 10;
-  Serial.print("GyX offset: ");
-  Serial.println(GyX_offset);
+  // Serial.print("GyX offset: ");
+  // Serial.println(GyX_offset);
 }
 
 void Motor1(int sp) {
@@ -382,8 +375,6 @@ void ENCODER_READ() { //Đọc Encodeder
   }
 }
 
-
-
 void setup() {
   Serial.begin(115200);
   bluetooth.begin(115200);
@@ -405,21 +396,20 @@ void setup() {
   attachInterrupt(1, ENCODER_READ, CHANGE);
   Homing_Sevor();
     
-  
-  // Khởi tạo thẻ SD
-  if (!SD.begin(chipSelect, SPI_FULL_SPEED)) {
-      Serial.println("SD card initialization failed!");
-    return;
-  }
-  Serial.println("SD card initialized.");
+//   // Khởi tạo thẻ SD
+//   if (!SD.begin(chipSelect, SPI_FULL_SPEED)) {
+//       Serial.println("SD card initialization failed!");
+//     return;
+//   }
+//   Serial.println("SD card initialized.");
 
-  // Tạo file CSV và lưu dữ liệu
- if (!dataFile.open("data.csv", FILE_WRITE)) {
-    Serial.println("Error opening data.csv");
-  } else {
-    dataFile.println("Timestamp, Angle");
-    dataFile.close();
-  }
+//   // Tạo file CSV và lưu dữ liệu
+//  if (!dataFile.open("data.csv", FILE_WRITE)) {
+//     Serial.println("Error opening data.csv");
+//   } else {
+//     dataFile.println("Timestamp, Angle");
+//     dataFile.close();
+//   }
 
 
   EEPROM.get(0, offsets);
@@ -450,42 +440,45 @@ void loop() {
       digitalWrite(BRAKE, HIGH);
 
       gyroX = GyX / 131.0;  // Convert to deg/s
-      gyroXfilt = alpha * gyroX + (1 - alpha) * gyroXfilt;  // Lọc thông thấp cho MPU
+      gyroXfilt = alpha * gyroX + (1 - alpha) * gyroXfilt;  // Lọc 
       motor_pos += motor_speed;
       motor_pos = constrain(motor_pos, -110, 110); 
 
 //------------------------------LQR CONTROLER----------------------------------//
-      // pwm = constrain(K1 * robot_angle + K2 * gyroXfilt + K3 * motor_speed + K4 * motor_pos, -255, 255);
+      pwm = constrain(K1 * robot_angle + K2 * gyroXfilt + K3 * motor_speed + K4 * motor_pos, -255, 255);
 //-----------------------------------------------------------------------------//
 
 //------------------------------PID CONTROLER----------------------------------//
-      float error = robot_angle;
-      integral += error * loop_time / 1000.0;
-      float derivative = (error - previous_error) / (loop_time / 1000.0);
-      pwm = constrain(Kp * error + Ki * integral + Kd * derivative + S*motor_speed + P*motor_pos, -255, 255);  
-      previous_error = error; 
+      // float error = robot_angle;
+      // integral += error * loop_time / 1000.0;
+      // float derivative = (error - previous_error) / (loop_time / 1000.0);
+      // pwm = constrain(Kp * error + Ki * integral + Kd * derivative + S*motor_speed + P*motor_pos, -255, 255);  
+      // previous_error = error; 
 //-----------------------------------------------------------------------------//
   
-
   //  // Ghi giá trị vào file CSV
-    if (millis() - previous_sdcard >= sd_interval)
-    {
-      previous_sdcard = millis();      
+  //   if (millis() - previous_sdcard >= sd_interval)
+  //   {
+  //     previous_sdcard = millis();      
        
-      if (dataFile.open("data.csv", FILE_WRITE)) {
-      dataFile.print(millis());
-      dataFile.print(",");
-      dataFile.println(robot_angle);
-      dataFile.close();
-      }else {
-      Serial.println("Error opening data.csv");
-    }
-    }
+  //     if (dataFile.open("data.csv", FILE_WRITE)) {
+  //     dataFile.print(millis());
+  //     dataFile.print(",");
+  //     dataFile.println(robot_angle);
+  //     dataFile.close();
+  //     }else {
+  //     Serial.println("Error opening data.csv");
+  //   }
+  //   }
 
       // Serial.print(speed_rad);
       // Serial.print("/");
       // Serial.println(robot_angle);
-
+  // Serial.print(gyroXfilt);
+  // Serial.print(",");
+  // Serial.print(robot_angle);
+  // Serial.print(",");
+  // Serial.println(robot_angle);
 
       Motor1(-pwm);
       conntrol_servo();
@@ -507,4 +500,5 @@ void loop() {
     previousT_2 = currentT;
   }
 }
+
 
